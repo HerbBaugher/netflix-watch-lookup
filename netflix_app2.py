@@ -2,83 +2,52 @@ import streamlit as st
 import pandas as pd
 import io
 from datetime import datetime
-from odf.opendocument import load
-from odf.text import P
 
-# ---------------------------
-# PAGE CONFIG
-# ---------------------------
-st.set_page_config(
-    page_title="Netflix Watch Lookup",
-    page_icon="🎬",
-    layout="centered"
-)
+# Optional ODT support
+try:
+    from odf.opendocument import load
+    from odf.text import P
+    ODT_ENABLED = True
+except:
+    ODT_ENABLED = False
 
-# ---------------------------
-# CUSTOM CSS FOR NICER UI
-# ---------------------------
-st.markdown("""
-<style>
-/* Center the main container */
-.main > div {
-    max-width: 700px;
-    margin: auto;
-}
-
-/* Input styling */
-input[type="text"] {
-    border-radius: 8px !important;
-}
-
-/* Card style for results */
-.result-card {
-    background: #f8f9fa;
-    padding: 18px 22px;
-    border-radius: 10px;
-    border: 1px solid #ddd;
-    margin-top: 15px;
-}
-
-/* Title styling */
-h1 {
-    text-align: center;
-    font-weight: 700;
-}
-
-/* Date bullets */
-.date-item {
-    padding-left: 10px;
-    margin-bottom: 4px;
-}
-</style>
-""", unsafe_allow_html=True)
 
 # ---------------------------
 # READ ODT FILE
 # ---------------------------
 def read_odt(file):
+    if not ODT_ENABLED:
+        st.error("ODT support not installed. Add 'odfpy' to requirements.txt")
+        return None
+
     textdoc = load(file)
     lines = []
+
     for p in textdoc.getElementsByType(P):
         lines.append(str(p))
+
     csv_text = "\n".join(lines)
     return pd.read_csv(io.StringIO(csv_text))
+
 
 # ---------------------------
 # LOAD DATAFRAME
 # ---------------------------
 def load_dataframe(uploaded_file):
 
-    if uploaded_file.name.lower().endswith(".odt"):
-        df = read_odt(uploaded_file)
-    else:
-        df = pd.read_csv(
-            uploaded_file,
-            encoding="latin1",
-            engine="python",
-            on_bad_lines="skip"
-        )
+    name = uploaded_file.name.lower()
 
+    if name.endswith(".odt"):
+        df = read_odt(uploaded_file)
+    elif name.endswith(".txt"):
+        df = pd.read_csv(uploaded_file, sep=",", engine="python", on_bad_lines="skip")
+    else:
+        df = pd.read_csv(uploaded_file, engine="python", on_bad_lines="skip")
+
+    if df is None:
+        return None
+
+    # Clean column names
     df.columns = (
         df.columns
         .str.strip()
@@ -87,23 +56,24 @@ def load_dataframe(uploaded_file):
         .str.replace("ï»¿", "", regex=False)
     )
 
+    # Validate required columns
     if "Title" not in df.columns or "Date" not in df.columns:
         st.error(f"Columns detected: {df.columns.tolist()}\nFile must contain Title and Date")
         return None
 
-    df["Date"] = pd.to_datetime(df["Date"], format="%m/%d/%y", errors="coerce")
+    # Parse Netflix date format
+    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
     df = df.dropna(subset=["Date"])
 
     return df
 
-# ---------------------------
-# UI
-# ---------------------------
-st.title("🎬 Netflix Watch Lookup")
 
-st.write("Upload your Netflix viewing history and instantly search when you watched any title.")
+# ---------------------------
+# STREAMLIT UI
+# ---------------------------
+st.title("📺 Netflix Watch Lookup")
 
-uploaded_file = st.file_uploader("Upload Netflix history file", type=["csv", "odt"])
+uploaded_file = st.file_uploader("Upload Netflix history file", type=["csv", "txt", "odt"])
 
 df = None
 
@@ -121,18 +91,24 @@ if df is not None:
         if matches.empty:
             st.warning(f"No watch history found for **{query}**.")
         else:
-            latest = matches["Date"].max()
 
-            st.markdown(f"""
-            <div class="result-card">
-                <h3>Results for: <strong>{query}</strong></h3>
-                <p><strong>Most recent watch:</strong> {latest.date()}</p>
-                <p><strong>Total times watched:</strong> {len(matches)}</p>
-                <hr>
-                <p><strong>All dates watched:</strong></p>
-            </div>
-            """, unsafe_allow_html=True)
+            st.subheader("Matching Titles")
 
-            for date in matches["Date"].sort_values():
-                st.markdown(f"<div class='date-item'>• {date.date()}</div>", unsafe_allow_html=True)
+            grouped = matches.groupby("Title")
+
+            for title, group in grouped:
+
+                latest = group["Date"].max()
+
+                # Title (full, no truncation)
+                st.markdown(f"### {title}")
+
+                st.write(f"**Times Watched:** {len(group)}")
+                st.write(f"**Most Recent Watch:** {latest.date()}")
+
+                st.write("**All Dates Watched:**")
+                for date in group["Date"].sort_values():
+                    st.write(f"- {date.date()}")
+
+                st.markdown("---")
 
