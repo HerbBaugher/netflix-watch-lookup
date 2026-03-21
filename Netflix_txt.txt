@@ -1,0 +1,2 @@
+
+streamlit==1.32.0 pandas==2.2.1 odfpy==1.4.1 pyngrok==7.1.6 python-dateutil==2.9.0 
