@@ -1,95 +1,98 @@
 import streamlit as st
 import pandas as pd
 from github import Github
-import io
-import re
-from datetime import datetime
+from io import StringIO
 
 # ---------------------------
-# GitHub secrets
+# GITHUB SETTINGS
 # ---------------------------
+# Make sure your secrets.toml has:
+# GITHUB_TOKEN = "your_token_here"
+# REPO_NAME = "HerbBaugher/netflix-watch-lookup"
+# FILE_PATH = "data/Netflix_txt.txt"
+
 GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
 REPO_NAME = st.secrets["REPO_NAME"]
 FILE_PATH = st.secrets["FILE_PATH"]
 
-# ---------------------------
-# Custom parser for Netflix_txt.txt
-# ---------------------------
-def parse_netflix_file(text):
-    lines = text.splitlines()
-    data = []
-    current_title = ""
+g = Github(GITHUB_TOKEN)
+repo = g.get_repo(REPO_NAME)
 
-    date_pattern = re.compile(r"\d{1,2}/\d{1,2}/\d{2,4}$")
-
+# ---------------------------
+# LOAD DATA
+# ---------------------------
+@st.cache_data
+def load_data():
+    contents = repo.get_contents(FILE_PATH)
+    text = contents.decoded_content.decode("utf-8")
+    # Space-separated data, some titles span multiple lines
+    lines = []
+    for line in text.splitlines():
+        if line.strip():  # skip empty lines
+            lines.append(line)
+    # Fix for multi-line titles
+    rows = []
+    temp_title = ""
     for line in lines[1:]:  # skip header
-        line = line.strip()
-        if not line:
-            continue
-        # Check if line ends with a date
-        match = date_pattern.search(line)
-        if match:
-            date_str = match.group()
-            title = line[:match.start()].strip()
-            if current_title:
-                title = current_title + " " + title
-                current_title = ""
-            data.append({"Title": title, "Date": date_str})
+        parts = line.rsplit(maxsplit=1)
+        if len(parts) == 2:
+            title, date = parts
+            if temp_title:
+                title = temp_title + " " + title
+                temp_title = ""
+            rows.append([title.strip(), date.strip()])
         else:
-            # Continuation of previous title
-            current_title = (current_title + " " + line).strip()
-    df = pd.DataFrame(data)
+            # title split across lines
+            temp_title += line.strip() + " "
+    df = pd.DataFrame(rows, columns=["Title", "Date"])
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
     df = df.dropna(subset=["Date"])
-    return df
+    return df, contents
+
+df, file_contents = load_data()
 
 # ---------------------------
-# Load Netflix file from GitHub
+# STREAMLIT UI
 # ---------------------------
-def load_github_txt():
-    g = Github(GITHUB_TOKEN)
-    repo = g.get_repo(REPO_NAME)
-    try:
-        file_content = repo.get_contents(FILE_PATH)
-        text = file_content.decoded_content.decode("utf-8")
-        df = parse_netflix_file(text)
-        return df
-    except Exception as e:
-        st.error(f"Error loading file: {e}")
-        return None
+st.title("📺 Netflix Watch Lookup")
 
-# ---------------------------
-# Save dataframe back to GitHub
-# ---------------------------
-def save_to_github(df, commit_message="Update Netflix watch history"):
-    g = Github(GITHUB_TOKEN)
-    repo = g.get_repo(REPO_NAME)
-    try:
-        # Convert back to space-separated text
-        lines = ["Title                  Date"]
-        for _, row in df.iterrows():
-            lines.append(f"{row['Title']}            {row['Date'].strftime('%-m/%-d/%y')}")
-        content = "\n".join(lines)
-        file = repo.get_contents(FILE_PATH)
-        repo.update_file(FILE_PATH, commit_message, content, file.sha)
-        st.success("✅ Netflix history updated on GitHub!")
-    except Exception as e:
-        st.error(f"Error saving file: {e}")
+# Search bar
+query = st.text_input("Search for a title")
+
+if query:
+    matches = df[df["Title"].str.contains(query, case=False, na=False)]
+    if matches.empty:
+        st.warning(f"No watch history found for **{query}**.")
+    else:
+        st.subheader("Matching Titles")
+        for title, group in matches.groupby("Title"):
+            latest = group["Date"].max()
+            st.markdown(f"### {title}")
+            st.write(f"**Times Watched:** {len(group)}")
+            st.write(f"**Most Recent Watch:** {latest.date()}")
+            st.write("**All Dates Watched:**")
+            for date in group["Date"].sort_values():
+                st.write(f"- {date.date()}")
+            st.markdown("---")
+
+st.info("You can edit the table below. After editing, click 'Save Changes' to update GitHub.")
+
+# Editable table
+edited_df = st.experimental_data_editor(df, num_rows="dynamic")
 
 # ---------------------------
-# Streamlit UI
+# SAVE TO GITHUB
 # ---------------------------
-st.title("📺 Netflix Watch History Editor")
+def save_to_github(updated_df):
+    csv_buffer = StringIO()
+    updated_df.to_csv(csv_buffer, index=False, sep=" ")
+    repo.update_file(
+        path=FILE_PATH,
+        message="Update Netflix watch history via Streamlit",
+        content=csv_buffer.getvalue(),
+        sha=file_contents.sha
+    )
+    st.success("Netflix_txt.txt updated on GitHub!")
 
-df = load_github_txt()
-
-if df is not None:
-    st.info("You can edit the table below. After editing, click 'Save Changes' to update GitHub.")
-    
-    edited_df = st.experimental_data_editor(df, num_rows="dynamic")
-
-    if st.button("Save Changes"):
-        save_to_github(edited_df)
-
-else:
-    st.warning("No data loaded yet. Make sure your GitHub secrets and CSV file are set correctly.")
+if st.button("Save Changes"):
+    save_to_github(edited_df)
