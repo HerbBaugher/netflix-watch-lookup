@@ -2,34 +2,29 @@ import streamlit as st
 import pandas as pd
 import base64
 from github import Github
+from io import StringIO
 
 # ---------------------------
-# STREAMLIT UI
+# PAGE SETUP
 # ---------------------------
 st.set_page_config(page_title="📺 Netflix Watch Lookup", layout="centered")
-
-st.title("📺 Netflix Watch Lookup")
+st.title("📺 Netflix Watch Lookup (Editable)")
 
 # ---------------------------
 # GITHUB SETTINGS
 # ---------------------------
-# Make sure your GitHub token is in secrets.toml
 try:
     g = Github(st.secrets["GITHUB_TOKEN"])
     REPO_NAME = st.secrets["REPO_NAME"]
     FILE_PATH = st.secrets["FILE_PATH"]
 except Exception:
     g = None
-    st.warning("GitHub secrets not set. Upload a file manually.")
+    st.warning("GitHub secrets not set. Upload file manually for editing.")
 
 # ---------------------------
-# PARSER FOR SPACE-SEPARATED TXT
+# PARSER FOR MULTI-LINE TXT
 # ---------------------------
 def parse_netflix_txt(file_content):
-    """
-    Parse Netflix_txt.txt even if space separated or multi-line titles exist.
-    Returns a DataFrame with 'Title' and 'Date'.
-    """
     lines = file_content.splitlines()
     data = []
     buffer = []
@@ -39,14 +34,13 @@ def parse_netflix_txt(file_content):
         if not line:
             continue
 
-        # Try splitting last word as date
         parts = line.rsplit(maxsplit=1)
         if len(parts) == 2:
             title_part, date_part = parts
             try:
                 date = pd.to_datetime(date_part, errors="raise", dayfirst=False)
                 full_title = " ".join(buffer + [title_part]) if buffer else title_part
-                data.append({"Title": full_title, "Date": date})
+                data.append({"Title": full_title, "Date": date.date()})
                 buffer = []
             except Exception:
                 buffer.append(line)
@@ -59,8 +53,6 @@ def parse_netflix_txt(file_content):
 # LOAD DATAFRAME
 # ---------------------------
 df = None
-
-# Option 1: Load directly from GitHub
 if g:
     try:
         repo = g.get_repo(REPO_NAME)
@@ -70,35 +62,40 @@ if g:
     except Exception as e:
         st.error(f"Error loading file from GitHub: {e}")
 
-# Option 2: Upload manually
 uploaded_file = st.file_uploader("Or upload your Netflix history file", type=["txt", "csv"])
 if uploaded_file:
     content = uploaded_file.read().decode("utf-8")
     df = parse_netflix_txt(content)
 
 # ---------------------------
-# DISPLAY DATA
+# EDITABLE TABLE
 # ---------------------------
 if df is not None and not df.empty:
-    st.write(f"ROWS LOADED: {len(df)}")
+    st.subheader("Your Netflix Watch History")
+    edited_df = st.experimental_data_editor(df, num_rows="dynamic")
 
-    query = st.text_input("Search for a title")
+    # ---------------------------
+    # SAVE BACK TO GITHUB
+    # ---------------------------
+    if st.button("Save to GitHub") and g:
+        csv_buffer = StringIO()
+        # Convert back to your space-separated format
+        for _, row in edited_df.iterrows():
+            csv_buffer.write(f"{row['Title']} {row['Date']}\n")
+        new_content = csv_buffer.getvalue()
 
-    if query:
-        matches = df[df["Title"].str.lower().str.contains(query.lower(), na=False)]
-        if matches.empty:
-            st.warning(f"No watch history found for **{query}**.")
-        else:
-            st.subheader("Matching Titles")
-            grouped = matches.groupby("Title")
-            for title, group in grouped:
-                latest = group["Date"].max()
-                st.markdown(f"### {title}")
-                st.write(f"**Times Watched:** {len(group)}")
-                st.write(f"**Most Recent Watch:** {latest.date()}")
-                st.write("**All Dates Watched:**")
-                for date in group["Date"].sort_values():
-                    st.write(f"- {date.date()}")
-                st.markdown("---")
+        # Update the file in GitHub
+        try:
+            file = repo.get_contents(FILE_PATH)
+            repo.update_file(
+                path=FILE_PATH,
+                message="Update Netflix watch history via Streamlit app",
+                content=new_content,
+                sha=file.sha
+            )
+            st.success("✅ Netflix_txt.txt updated in GitHub!")
+        except Exception as e:
+            st.error(f"Failed to update GitHub: {e}")
+
 else:
-    st.info("No data loaded yet. Make sure your file has the correct format.")
+    st.info("No data loaded yet. Make sure your file has correct format.")
