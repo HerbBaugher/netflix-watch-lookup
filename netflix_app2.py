@@ -59,9 +59,14 @@ def save_to_github(df):
         st.error(f"Failed to save: {e}")
 
 # ---------------------------
-# Episode extraction
+# Episode extraction (SAFE)
 # ---------------------------
 def extract_episode(title):
+    # Ensure title is always a string
+    if title is None:
+        return None
+    title = str(title).strip()
+
     match = re.search(r"Season\s+(\d+)", title, re.IGNORECASE)
     return int(match.group(1)) if match else None
 
@@ -96,8 +101,10 @@ st.bar_chart(monthly.set_index("Month"))
 
 # Episode grouping
 st.subheader("🎬 Episodes by Season")
+df["Title"] = df["Title"].astype(str)  # ensure safe
 df["Season"] = df["Title"].apply(extract_episode)
 episodes = df.dropna(subset=["Season"])
+
 if not episodes.empty:
     st.dataframe(episodes.sort_values(["Season", "Date"], ascending=[True, False]))
 else:
