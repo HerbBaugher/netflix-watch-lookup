@@ -16,7 +16,7 @@ FILE_PATH = st.secrets["FILE_PATH"]
 # Helper functions
 # ---------------------------
 def load_from_github():
-    """Load Netflix_txt.txt from GitHub and parse multi-line titles."""
+    """Load Netflix_txt.txt from GitHub and correctly parse multi-line titles."""
     try:
         g = Github(GITHUB_TOKEN)
         repo = g.get_repo(REPO_NAME)
@@ -25,29 +25,50 @@ def load_from_github():
 
         lines = content.splitlines()
         data = []
-        current_title = ""
-        date_pattern = re.compile(r"\d{1,2}/\d{1,2}/\d{2,4}")  # matches dates like 3/8/26
 
-        for line in lines[1:]:  # skip header
-            line = line.strip()
+        # Netflix TXT format: Title may span multiple lines until a date appears
+        date_pattern = re.compile(r"\b\d{1,2}/\d{1,2}/\d{2,4}\b")
+
+        current_title = ""
+
+        for raw in lines[1:]:  # skip header
+            line = raw.strip()
             if not line:
                 continue
-            date_match = date_pattern.search(line)
-            if date_match:
-                date_str = date_match.group()
-                title = (current_title + " " + line[:date_match.start()]).strip()
-                data.append([title, date_str])
-                current_title = ""
-            else:
-                current_title += " " + line if current_title else line
 
+            date_match = date_pattern.search(line)
+
+            if date_match:
+                # Extract date
+                date_str = date_match.group()
+
+                # Extract title portion on the same line
+                title_part = line[:date_match.start()].strip()
+
+                # Combine with previous accumulated title lines
+                full_title = (current_title + " " + title_part).strip()
+
+                if full_title:
+                    data.append([full_title, date_str])
+
+                # Reset for next title
+                current_title = ""
+
+            else:
+                # No date → this is part of a multi-line title
+                current_title = (current_title + " " + line).strip()
+
+        # Build DataFrame
         df = pd.DataFrame(data, columns=["Title", "Date"])
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
         df = df.dropna(subset=["Date"])
+
         return df
+
     except Exception as e:
         st.error(f"Error loading file from GitHub: {e}")
         return None
+
 
 def save_to_github(df):
     """Save edited dataframe back to GitHub."""
@@ -60,6 +81,7 @@ def save_to_github(df):
         st.success("✅ File updated on GitHub!")
     except Exception as e:
         st.error(f"Failed to save to GitHub: {e}")
+
 
 # ---------------------------
 # Streamlit UI
@@ -98,3 +120,4 @@ if df is not None:
                 for date in group["Date"].sort_values():
                     st.write(f"- {date.date()}")
                 st.markdown("---")
+
