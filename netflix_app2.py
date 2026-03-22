@@ -1,55 +1,32 @@
 import streamlit as st
 import pandas as pd
-import io
 import base64
+import io
 from github import Github
-from odf.opendocument import load
-from odf.text import P
+from datetime import datetime
 
 # ---------------------------
-# PAGE SETUP
+# PAGE CONFIG
 # ---------------------------
-st.set_page_config(
-    page_title="Netflix Data Editor",
-    layout="wide"
-)
-st.title("📺 Netflix Watch Lookup & Editor")
-if st.button("🔄 Refresh Data"):
-    st.cache_data.clear()
-    st.cache_resource.clear()
-    st.rerun()
-# ---------------------------
-# READ ODT FILE (optional)
-# ---------------------------
-def read_odt(file):
-    textdoc = load(file)
-    lines = []
-    for p in textdoc.getElementsByType(P):
-        lines.append(str(p))
-    csv_text = "\n".join(lines)
-    return pd.read_csv(io.StringIO(csv_text))
+st.set_page_config(page_title="Netflix Watch Lookup", layout="wide")
+st.title("📺 Netflix Watch Lookup")
 
 # ---------------------------
 # LOAD DATA FROM GITHUB
 # ---------------------------
-st.write("FILE PATH:", st.secrets["FILE_PATH"])
-st.write("ROWS:", len(df))
-st.write(df.head())
-@st.cache_data
+@st.cache_data(show_spinner=True)
 def load_data():
+    """Load Netflix_txt.txt from GitHub using secrets."""
     try:
         g = Github(st.secrets["GITHUB_TOKEN"])
         repo = g.get_repo(st.secrets["REPO_NAME"])
-        file = repo.get_contents(st.secrets["FILE_PATH"])
-        content = base64.b64decode(file.content)
+        file_path = st.secrets["FILE_PATH"]
 
-        # Detect file type
-        if st.secrets["FILE_PATH"].lower().endswith(".odt"):
-            df = read_odt(io.BytesIO(content))
-        elif st.secrets["FILE_PATH"].lower().endswith(".txt"):
-            df = pd.read_csv(io.StringIO(content.decode("utf-8")), sep=",", engine="python", on_bad_lines="skip")
-        else:
-            df = pd.read_csv(io.StringIO(content.decode("utf-8")))
+        file_content = repo.get_contents(file_path)
+        content = base64.b64decode(file_content.content).decode("utf-8")
+
+        # Load CSV
+        df = pd.read_csv(io.StringIO(content), sep=",", engine="python", on_bad_lines="skip")
 
         # Clean column names
         df.columns = (
@@ -60,20 +37,22 @@ def load_data():
             .str.replace("ï»¿", "", regex=False)
         )
 
-        # Parse Netflix date column
-        if "Date" in df.columns:
-            df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-            df = df.dropna(subset=["Date"])
+        # Ensure required columns
+        if "Title" not in df.columns or "Date" not in df.columns:
+            st.error(f"Columns detected: {df.columns.tolist()}. Must include 'Title' and 'Date'.")
+            return None, None
 
-        return df, file.sha
+        # Convert Date to datetime
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+        df = df.dropna(subset=["Date"])
+
+        return df, file_content.sha
 
     except Exception as e:
         st.error(f"Error loading data from GitHub: {e}")
         return None, None
 
-# ---------------------------
-# LOAD DATA
-# ---------------------------
+
 df, sha = load_data()
 
 if df is not None:
@@ -83,19 +62,44 @@ if df is not None:
     # ---------------------------
     # SAVE BACK TO GITHUB
     # ---------------------------
-    if st.button("Save Changes"):
+    if st.button("Save Changes to GitHub"):
         try:
             g = Github(st.secrets["GITHUB_TOKEN"])
             repo = g.get_repo(st.secrets["REPO_NAME"])
             csv_bytes = edited_df.to_csv(index=False).encode("utf-8")
+
             repo.update_file(
                 path=st.secrets["FILE_PATH"],
                 message="Updated Netflix data via Streamlit",
                 content=csv_bytes,
                 sha=sha
             )
-            st.success("Changes saved to GitHub!")
+            st.success("✅ Changes saved to GitHub!")
+
         except Exception as e:
-            st.error(f"Error saving file: {e}")
+            st.error(f"Failed to save changes: {e}")
+
+    # ---------------------------
+    # SEARCH & DISPLAY
+    # ---------------------------
+    st.subheader("Search Netflix Watch History")
+    query = st.text_input("Search by Title")
+
+    if query:
+        matches = df[df["Title"].str.lower().str.contains(query.lower(), na=False)]
+        if matches.empty:
+            st.warning(f"No watch history found for **{query}**.")
+        else:
+            grouped = matches.groupby("Title")
+            for title, group in grouped:
+                latest = group["Date"].max()
+                st.markdown(f"### {title}")
+                st.write(f"**Times Watched:** {len(group)}")
+                st.write(f"**Most Recent Watch:** {latest.date()}")
+                st.write("**All Dates Watched:**")
+                for date in group["Date"].sort_values():
+                    st.write(f"- {date.date()}")
+                st.markdown("---")
+
 else:
-    st.info("No data loaded. Check your GitHub token, repo, or file path in secrets.toml")
+    st.info("No data loaded yet.")
