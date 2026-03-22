@@ -14,7 +14,9 @@ st.set_page_config(
     layout="wide"
 )
 st.title("📺 Netflix Watch Lookup & Editor")
-
+if st.button("🔄 Refresh Data"):
+    st.cache_data.clear()
+    st.rerun()
 # ---------------------------
 # READ ODT FILE (optional)
 # ---------------------------
