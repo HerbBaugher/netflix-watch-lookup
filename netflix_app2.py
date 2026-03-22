@@ -92,16 +92,10 @@ def save_to_github(df):
 # Episode extraction
 # ---------------------------
 def extract_episode(title):
-    """
-    Extracts season/episode info from titles like:
-    - Season 3: Razzmatazz
-    - Season 3: Lockstep
-    - Season 3: Truth Be Told
-    """
+    """Extracts season number from titles like 'Season 3: Razzmatazz'."""
     season_match = re.search(r"Season\s+(\d+)", title, re.IGNORECASE)
     if season_match:
-        season = int(season_match.group(1))
-        return season
+        return int(season_match.group(1))
     return None
 
 # ---------------------------
@@ -109,8 +103,10 @@ def extract_episode(title):
 # ---------------------------
 st.title("📺 Netflix Watch History — Lookup, Stats & Editor")
 
-# Auto-refresh every 30 seconds
-st_autorefresh = st.experimental_rerun
+# Refresh Now button
+if st.button("🔄 Refresh Now"):
+    st.cache_data.clear()
+    st.rerun()
 
 df = load_from_github()
 
