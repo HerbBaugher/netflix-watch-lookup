@@ -1,114 +1,95 @@
 import streamlit as st
 import pandas as pd
 import io
-from datetime import datetime
-
-# Optional ODT support
-try:
-    from odf.opendocument import load
-    from odf.text import P
-    ODT_ENABLED = True
-except:
-    ODT_ENABLED = False
-
+import base64
+from github import Github
+from odf.opendocument import load
+from odf.text import P
 
 # ---------------------------
-# READ ODT FILE
+# PAGE SETUP
+# ---------------------------
+st.set_page_config(
+    page_title="Netflix Data Editor",
+    layout="wide"
+)
+st.title("📺 Netflix Watch Lookup & Editor")
+
+# ---------------------------
+# READ ODT FILE (optional)
 # ---------------------------
 def read_odt(file):
-    if not ODT_ENABLED:
-        st.error("ODT support not installed. Add 'odfpy' to requirements.txt")
-        return None
-
     textdoc = load(file)
     lines = []
-
     for p in textdoc.getElementsByType(P):
         lines.append(str(p))
-
     csv_text = "\n".join(lines)
     return pd.read_csv(io.StringIO(csv_text))
 
+# ---------------------------
+# LOAD DATA FROM GITHUB
+# ---------------------------
+@st.cache_data
+def load_data():
+    try:
+        g = Github(st.secrets["GITHUB_TOKEN"])
+        repo = g.get_repo(st.secrets["REPO_NAME"])
+        file = repo.get_contents(st.secrets["FILE_PATH"])
+        content = base64.b64decode(file.content)
+
+        # Detect file type
+        if st.secrets["FILE_PATH"].lower().endswith(".odt"):
+            df = read_odt(io.BytesIO(content))
+        elif st.secrets["FILE_PATH"].lower().endswith(".txt"):
+            df = pd.read_csv(io.StringIO(content.decode("utf-8")), sep=",", engine="python", on_bad_lines="skip")
+        else:
+            df = pd.read_csv(io.StringIO(content.decode("utf-8")))
+
+        # Clean column names
+        df.columns = (
+            df.columns
+            .str.strip()
+            .str.replace('"', '', regex=False)
+            .str.replace("'", "", regex=False)
+            .str.replace("ï»¿", "", regex=False)
+        )
+
+        # Parse Netflix date column
+        if "Date" in df.columns:
+            df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+            df = df.dropna(subset=["Date"])
+
+        return df, file.sha
+
+    except Exception as e:
+        st.error(f"Error loading data from GitHub: {e}")
+        return None, None
 
 # ---------------------------
-# LOAD DATAFRAME
+# LOAD DATA
 # ---------------------------
-def load_dataframe(uploaded_file):
-
-    name = uploaded_file.name.lower()
-
-    if name.endswith(".odt"):
-        df = read_odt(uploaded_file)
-    elif name.endswith(".txt"):
-        df = pd.read_csv(uploaded_file, sep=",", engine="python", on_bad_lines="skip")
-    else:
-        df = pd.read_csv(uploaded_file, engine="python", on_bad_lines="skip")
-
-    if df is None:
-        return None
-
-    # Clean column names
-    df.columns = (
-        df.columns
-        .str.strip()
-        .str.replace('"', '', regex=False)
-        .str.replace("'", "", regex=False)
-        .str.replace("ï»¿", "", regex=False)
-    )
-
-    # Validate required columns
-    if "Title" not in df.columns or "Date" not in df.columns:
-        st.error(f"Columns detected: {df.columns.tolist()}\nFile must contain Title and Date")
-        return None
-
-    # Parse Netflix date format
-    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-    df = df.dropna(subset=["Date"])
-
-    return df
-
-
-# ---------------------------
-# STREAMLIT UI
-# ---------------------------
-st.title("📺 Netflix Watch Lookup")
-
-uploaded_file = st.file_uploader("Upload Netflix history file", type=["csv", "txt", "odt"])
-
-df = None
-
-if uploaded_file:
-    df = load_dataframe(uploaded_file)
+df, sha = load_data()
 
 if df is not None:
+    st.subheader("Edit Netflix Data")
+    edited_df = st.data_editor(df, num_rows="dynamic")
 
-    query = st.text_input("Search for a title")
-
-    if query:
-
-        matches = df[df["Title"].str.lower().str.contains(query.lower(), na=False)]
-
-        if matches.empty:
-            st.warning(f"No watch history found for **{query}**.")
-        else:
-
-            st.subheader("Matching Titles")
-
-            grouped = matches.groupby("Title")
-
-            for title, group in grouped:
-
-                latest = group["Date"].max()
-
-                # Title (full, no truncation)
-                st.markdown(f"### {title}")
-
-                st.write(f"**Times Watched:** {len(group)}")
-                st.write(f"**Most Recent Watch:** {latest.date()}")
-
-                st.write("**All Dates Watched:**")
-                for date in group["Date"].sort_values():
-                    st.write(f"- {date.date()}")
-
-                st.markdown("---")
-
+    # ---------------------------
+    # SAVE BACK TO GITHUB
+    # ---------------------------
+    if st.button("Save Changes"):
+        try:
+            g = Github(st.secrets["GITHUB_TOKEN"])
+            repo = g.get_repo(st.secrets["REPO_NAME"])
+            csv_bytes = edited_df.to_csv(index=False).encode("utf-8")
+            repo.update_file(
+                path=st.secrets["FILE_PATH"],
+                message="Updated Netflix data via Streamlit",
+                content=csv_bytes,
+                sha=sha
+            )
+            st.success("Changes saved to GitHub!")
+        except Exception as e:
+            st.error(f"Error saving file: {e}")
+else:
+    st.info("No data loaded. Check your GitHub token, repo, or file path in secrets.toml")
