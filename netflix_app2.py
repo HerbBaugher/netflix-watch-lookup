@@ -31,6 +31,9 @@ def read_odt(file):
 # ---------------------------
 # LOAD DATA FROM GITHUB
 # ---------------------------
+st.write("FILE PATH:", st.secrets["FILE_PATH"])
+st.write("ROWS:", len(df))
+st.write(df.head())
 @st.cache_data
 def load_data():
     try:
