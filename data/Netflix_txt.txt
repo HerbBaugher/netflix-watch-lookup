@@ -1,6 +1,6 @@
 Title,Date
 War Machine,2026-03-08
-test,2026-03-07
+Bot sure,2026-03-07
 Series: Black,2026-03-07
 Rebirth,2026-03-06
 Richard Harris,2026-03-06
