@@ -14,24 +14,24 @@ FILE_PATH = st.secrets["FILE_PATH"]
 # ---------------------------
 # Helper functions
 # ---------------------------
-def load_text_file(file):
-    """Load space-separated Netflix_txt.txt file with 'Title' and 'Date' columns."""
+def load_from_github():
+    """Load Netflix_txt.txt directly from GitHub."""
     try:
-        # Split by at least two spaces
-        df = pd.read_csv(file, sep=r"\s{2,}", engine="python", header=0)
+        g = Github(GITHUB_TOKEN)
+        repo = g.get_repo(REPO_NAME)
+        file_content = repo.get_contents(FILE_PATH)
+        content = file_content.decoded_content.decode("utf-8")
+        df = pd.read_csv(io.StringIO(content), sep=r"\s{2,}", engine="python")
         df.columns = df.columns.str.strip()
-        if "Title" not in df.columns or "Date" not in df.columns:
-            st.error(f"Columns detected: {df.columns.tolist()}. Must include 'Title' and 'Date'.")
-            return None
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
         df = df.dropna(subset=["Date"])
         return df
     except Exception as e:
-        st.error(f"Error loading file: {e}")
+        st.error(f"Error loading file from GitHub: {e}")
         return None
 
 def save_to_github(df):
-    """Save the edited dataframe back to GitHub as CSV."""
+    """Save edited dataframe back to GitHub."""
     try:
         csv_data = df.to_csv(index=False)
         g = Github(GITHUB_TOKEN)
@@ -47,30 +47,26 @@ def save_to_github(df):
 # ---------------------------
 st.title("📺 Netflix Watch Lookup")
 
-# Check Streamlit version
+# Streamlit version check
 version = tuple(map(int, st.__version__.split(".")))
 if version < (1, 32):
     st.warning("⚠️ Editable table requires Streamlit 1.32+. Please upgrade Streamlit.")
     st.stop()
 
-# File uploader
-uploaded_file = st.file_uploader(
-    "Upload Netflix history file (txt or csv)", type=["txt", "csv"]
-)
+# Load data from GitHub
+df = load_from_github()
 
-df = None
-if uploaded_file:
-    df = load_text_file(uploaded_file)
-
-# Show dataframe and editable table
 if df is not None:
     st.info("You can edit the table below. After editing, click 'Save Changes' to update GitHub.")
+    
+    # Editable table
     edited_df = st.data_editor(df, num_rows="dynamic")
 
+    # Save button
     if st.button("Save Changes"):
         save_to_github(edited_df)
 
-# Search functionality
+# Search box
 if df is not None:
     query = st.text_input("Search for a title")
     if query:
