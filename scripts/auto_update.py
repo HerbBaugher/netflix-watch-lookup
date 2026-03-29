@@ -1,22 +1,28 @@
 import pandas as pd
-from datetime import datetime
-import os
-import sys
+import re
 
-# Default data file path (override via env or CLI)
-FILE_PATH = 'your_data_file.csv'
+def load_netflix_file(text: str) -> pd.DataFrame:
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    rows = []
 
+    date_pattern = re.compile(r'(\d{1,2}/\d{1,2}/\d{2})$')
 
-def load_dataframe(path: str) -> pd.DataFrame:
-    """Load CSV with fallbacks for malformed lines or missing file."""
-    try:
-        return pd.read_csv(path, sep=',', engine='python', on_bad_lines='skip')
-    except pd.errors.ParserError as e:
-        print(f"CSV parsing error: {e}")
-        return pd.read_csv(path, sep=',', engine='python', on_bad_lines='warn')
-    except FileNotFoundError:
-        print(f"Data file not found: {path}. Creating a new one.")
-        return pd.DataFrame(columns=['Title', 'Date'])
+    for line in lines:
+        # Skip header if present
+        if line.lower().startswith("title,date"):
+            continue
+
+        match = date_pattern.search(line)
+        if not match:
+            # Skip malformed lines
+            continue
+
+        date = match.group(1)
+        title = line[:match.start()].strip()
+
+        rows.append({"Title": title, "Date": date})
+
+    return pd.DataFrame(rows)
 
 
 def ensure_columns(df: pd.DataFrame):
