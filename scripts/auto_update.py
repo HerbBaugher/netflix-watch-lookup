@@ -1,11 +1,12 @@
 import pandas as pd
-from datetime import datetime
 
-FILE_PATH = 'data/Netflix_txt.txt'
-
-def main():
-    # Load existing file with proper delimiter
-    df = pd.read_csv(FILE_PATH, sep=',')  # Specify comma as delimiter
+# Add error handling and flexible parsing
+try:
+    df = pd.read_csv('your_data_file.csv', sep=',', engine='python', on_bad_lines='skip')
+except pd.errors.ParserError as e:
+    print(f"CSV parsing error: {e}")
+    # Try alternative parsing with different parameters
+    df = pd.read_csv('your_data_file.csv', sep=',', engine='python', on_bad_lines='warn')
     
     # Create new row
     new_row = {
