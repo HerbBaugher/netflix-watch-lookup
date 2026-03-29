@@ -2272,3 +2272,4 @@ Purchase online at
 https://secure.nch.com.au/cgi-bin/register.exe?software=doxillion
 This page will be converted once Doxillion is purchased.
 Auto-update heartbeat03/29/26
+Auto-update heartbeat03/29/26
