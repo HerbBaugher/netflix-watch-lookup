@@ -1,70 +1,49 @@
-import pandas as pd
-import re
+import os
+import sys
+from datetime import datetime
 
-def load_netflix_file(text: str) -> pd.DataFrame:
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    rows = []
-
-    date_pattern = re.compile(r'(\d{1,2}/\d{1,2}/\d{2})$')
-
-    for line in lines:
-        # Skip header if present
-        if line.lower().startswith("title,date"):
-            continue
-
-        match = date_pattern.search(line)
-        if not match:
-            # Skip malformed lines
-            continue
-
-        date = match.group(1)
-        title = line[:match.start()].strip()
-
-        rows.append({"Title": title, "Date": date})
-
-    return pd.DataFrame(rows)
+# Path to your Netflix TXT file
+FILE_PATH = "data/Netflix_txt.txt"
 
 
-def ensure_columns(df: pd.DataFrame):
-    """Ensure required columns exist."""
-    for col in ['Title', 'Date']:
-        if col not in df.columns:
-            df[col] = pd.NA
+def load_text_file(path: str) -> list[str]:
+    """Load the raw TXT file as a list of lines."""
+    if not os.path.exists(path):
+        print(f"File not found: {path}. Creating a new one.")
+        return ["Title,Date\n"]  # keep header for consistency
+
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read().splitlines()
 
 
-def append_heartbeat(df: pd.DataFrame) -> pd.DataFrame:
-    """Append a heartbeat row with today's date."""
-    new_row = {
-        'Title': 'Auto-update heartbeat',
-        'Date': datetime.now().strftime('%m/%d/%y')
-    }
-    return pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+def append_heartbeat(lines: list[str]) -> list[str]:
+    """Append a TXT‑style heartbeat line with no comma."""
+    heartbeat = f"Auto-update heartbeat{datetime.now().strftime('%m/%d/%y')}"
+    lines.append(heartbeat)
+    return lines
 
 
-def save_dataframe(df: pd.DataFrame, path: str):
-    """Save CSV with consistent formatting."""
-    df.to_csv(path, index=False, lineterminator='\n')
+def save_text_file(lines: list[str], path: str):
+    """Save the file back in TXT format."""
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        for line in lines:
+            f.write(line.rstrip() + "\n")
+
     print(f"Updated data saved to {path}")
 
 
 def main():
-    # Allow overriding path via environment or CLI
-    data_path = os.environ.get('DATA_FILE', FILE_PATH)
+    # Allow override via environment or CLI
+    data_path = os.environ.get("DATA_FILE", FILE_PATH)
 
     if len(sys.argv) > 1:
-        data_path = sys.argv[1]   # ← FIXED (removed HTML garbage)
+        data_path = sys.argv[1]
 
-    df = load_dataframe(data_path)
-
-    if df.empty:
-        ensure_columns(df)
-
-    df = append_heartbeat(df)
-    ensure_columns(df)
-
-    save_dataframe(df, data_path)
+    lines = load_text_file(data_path)
+    lines = append_heartbeat(lines)
+    save_text_file(lines, data_path)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
 
