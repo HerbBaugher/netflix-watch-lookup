@@ -1,72 +1,48 @@
-import csv
-from datetime import datetime
+import pandas as pd
 from pathlib import Path
 
-RAW = Path("raw_netflix.txt")
-OUT = Path("netflix.csv")
+# Paths
+ROOT = Path(__file__).resolve().parent.parent
+DATA = ROOT / "data"
 
-DATE_FORMATS = ["%m/%d/%y", "%m/%d/%Y"]
+# Correct input file
+RAW = DATA / "Netflix_txt.txt"
 
-def is_date(s: str) -> bool:
-    """Check if a string is a valid date in supported formats."""
-    s = s.strip()
-    for fmt in DATE_FORMATS:
-        try:
-            datetime.strptime(s, fmt)
-            return True
-        except ValueError:
-            pass
-    return False
+# Output file (same as auto_update.py)
+OUTPUT = ROOT / "netflix_data.csv"
 
-def extract_date(line: str):
-    """
-    If a date appears at the end of the line, return (title_part, date).
-    Otherwise return (None, None).
-    """
-    parts = line.rsplit(" ", 1)
-    if len(parts) == 2 and is_date(parts[1]):
-        return parts[0].strip(), parts[1].strip()
-    return None, None
 
 def normalize():
+    """Normalize the Netflix TXT file into a clean CSV."""
     if not RAW.exists():
         raise FileNotFoundError(f"Missing input file: {RAW}")
 
-    # Read all non-empty lines
-    with RAW.open("r", encoding="utf-8") as f:
-        lines = [line.rstrip() for line in f if line.strip()]
+    print(f"Reading TXT file: {RAW}")
 
-    rows = []
-    current_title = ""
+    # Read the Netflix TXT file (tab-separated)
+    df = pd.read_csv(RAW, sep="\t", header=0, encoding="utf-8")
 
-    for line in lines:
-        title_part, date = extract_date(line)
+    # Standardize column names
+    df.columns = [c.strip().replace(" ", "_").lower() for c in df.columns]
 
-        if date:
-            # This is the final line of a record
-            full_title = (current_title + " " + title_part).strip()
-            rows.append((full_title, date))
-            current_title = ""  # reset for next record
-        else:
-            # Wrapped title line
-            current_title = (current_title + " " + line).strip()
+    # Convert date column if present
+    if "date" in df.columns:
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")
 
-    # Validation
-    for idx, (title, date) in enumerate(rows, start=1):
-        if not title:
-            raise ValueError(f"Row {idx}: Empty title")
-        if not is_date(date):
-            raise ValueError(f"Row {idx}: Invalid date '{date}'")
+    # Save normalized CSV
+    df.to_csv(OUTPUT, index=False)
+    print(f"Saved normalized CSV → {OUTPUT}")
 
-    # Write clean CSV
-    with OUT.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(["Title", "Date"])
-        for title, date in rows:
-            writer.writerow([title, date])
 
-    print(f"Normalized {len(rows)} rows → {OUT}")
+def main():
+    print("=== Normalize Netflix TXT Starting ===")
+    print(f"ROOT: {ROOT}")
+    print(f"DATA: {DATA}")
 
-if __name__ == "__main__":
     normalize()
 
+    print("=== Normalize Netflix TXT Complete ===")
+
+
+if __name__ == "__main__":
+    main()
