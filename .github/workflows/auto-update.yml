@@ -38,7 +38,7 @@ jobs:
           git config user.email "actions@github.com"
 
       # ---------------------------------------------------------
-      # BACKUP PREVIOUS CSV (before rebase)
+      # BACKUP PREVIOUS CSV
       # ---------------------------------------------------------
       - name: Backup previous CSV
         run: |
@@ -65,7 +65,7 @@ jobs:
           fi
 
       # ---------------------------------------------------------
-      # SHOW DIFF (for debugging)
+      # SHOW DIFF
       # ---------------------------------------------------------
       - name: Show diff of changes
         run: |
@@ -78,60 +78,16 @@ jobs:
       # ---------------------------------------------------------
       - name: Commit changes
         run: |
-          if [ -n "$(git status --porcelain)" ]; then
-
-name: Auto Update Netflix Data
-
-on:
-  schedule:
-    - cron: "0 */6 * * *"   # every 6 hours (change as needed)
-  workflow_dispatch:
-
-permissions:
-  contents: write
-
-jobs:
-  update:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-
-      - name: Run update pipeline
-        run: |
-          python run_update_pipeline.py
-
-      - name: Configure Git
-        run: |
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-
-      - name: Pull latest changes (avoid fetch-first errors)
-        run: |
-          git pull --rebase origin main || true
-
-      - name: Commit changes
-        run: |
-          if [ -n "$(git status --porcelain)" ]; then
-            git add netflix.csv raw_netflix.csv || true
-            git commit -m "Automated data update"
+          if [ -n "$(git.status --porcelain)" ]; then
+            git add .
+            git.commit -m "Automated data update"
           else
             echo "No changes to commit"
           fi
 
+      # ---------------------------------------------------------
+      # PUSH CHANGES
+      # ---------------------------------------------------------
       - name: Push changes
         run: |
           if [ -n "$(git log origin/main..HEAD)" ]; then
