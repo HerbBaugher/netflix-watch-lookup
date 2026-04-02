@@ -27,4 +27,23 @@ def normalize():
     df.columns = [c.strip().replace(" ", "_").lower() for c in df.columns]
 
     # Convert date column if present
-    if "date" in
+    if "date" in df.columns:
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")
+
+    # Save normalized CSV
+    df.to_csv(OUTPUT_CSV, index=False)
+    print(f"Saved normalized CSV → {OUTPUT_CSV}")
+
+
+def main():
+    print("=== Auto Update Script Starting ===")
+    print(f"ROOT: {ROOT}")
+    print(f"DATA: {DATA}")
+
+    normalize()
+
+    print("=== Auto Update Complete ===")
+
+
+if __name__ == "__main__":
+    main()
