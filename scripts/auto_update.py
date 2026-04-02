@@ -1,71 +1,30 @@
-import csv
-from datetime import datetime
+import pandas as pd
 from pathlib import Path
 
-RAW = Path("raw_netflix.csv")
-OUT = Path("netflix.csv")
+# Paths
+ROOT = Path(__file__).resolve().parent.parent
+DATA = ROOT / "data"
 
-DATE_FORMATS = ["%m/%d/%y", "%m/%d/%Y"]
+# Correct input files
+RAW_TXT = DATA / "Netflix_txt.txt"
+RAW_CSV = DATA / "NetflixViewingHistory.csv"  # optional if needed
 
-def is_date(s: str) -> bool:
-    s = s.strip()
-    for fmt in DATE_FORMATS:
-        try:
-            datetime.strptime(s, fmt)
-            return True
-        except ValueError:
-            pass
-    return False
+# Output file
+OUTPUT_CSV = ROOT / "netflix_data.csv"
+
 
 def normalize():
-    if not RAW.exists():
-        raise FileNotFoundError(f"Missing input file: {RAW}")
+    """Normalize the Netflix TXT file into a clean CSV."""
+    if not RAW_TXT.exists():
+        raise FileNotFoundError(f"Missing input file: {RAW_TXT}")
 
-    with RAW.open("r", encoding="utf-8") as f:
-        lines = [line.strip() for line in f if line.strip()]
+    print(f"Reading TXT file: {RAW_TXT}")
 
-    rows = []
-    current_title = ""
+    # Read the Netflix TXT file (tab-separated)
+    df = pd.read_csv(RAW_TXT, sep="\t", header=0, encoding="utf-8")
 
-    for line in lines:
-        parts = [p.strip() for p in line.split(",")]
+    # Standardize column names
+    df.columns = [c.strip().replace(" ", "_").lower() for c in df.columns]
 
-        # If line has a valid date → new record
-        if len(parts) >= 2 and is_date(parts[-1]):
-            date = parts[-1]
-            title = ",".join(parts[:-1]).strip()
-
-            # If previous title exists, flush it
-            if current_title:
-                rows.append((current_title, last_date))
-
-            current_title = title
-            last_date = date
-
-        else:
-            # Wrapped title line → append to previous title
-            current_title = f"{current_title} {line}".strip()
-
-    # Flush last row
-    if current_title:
-        rows.append((current_title, last_date))
-
-    # Validation
-    for idx, (title, date) in enumerate(rows, start=1):
-        if not title:
-            raise ValueError(f"Row {idx}: Empty title")
-        if not is_date(date):
-            raise ValueError(f"Row {idx}: Invalid date '{date}'")
-
-    # Write clean CSV
-    with OUT.open("w", encoding="utf-8", newline="") as f:
-        w = csv.writer(f)
-        w.writerow(["Title", "Date"])
-        for t, d in rows:
-            w.writerow([t, d])
-
-    print(f"Normalized {len(rows)} rows → {OUT}")
-
-if __name__ == "__main__":
-    normalize()
-
+    # Convert date column if present
+    if "date" in
