@@ -51,8 +51,7 @@ def normalize():
             raise ValueError(f"Row {idx}: Invalid date '{date}'")
 
     # Write CSV with QUOTED titles
-    with OUT.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.writer(f, quoting=csv.QUOTE_ALL)
+    with OUT.open("w", encoding="utf-8", newline="") as writer = csv.writer(f, quoting=csv.QUOTE_MINIMAL, escapechar='\\')
         writer.writerow(["Title", "Date"])
         for title, date in rows:
             writer.writerow([title, date])
