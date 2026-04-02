@@ -2,8 +2,8 @@ name: Update Netflix Data
 
 on:
   schedule:
-    - cron: "0 */6 * * *"   # runs every 6 hours (adjust if needed)
-  workflow_dispatch:        # allows manual run
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
 
 concurrency:
   group: netflix-update
@@ -14,46 +14,54 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1. Checkout repo (REQUIRED)
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # IMPORTANT for pull/rebase
+          fetch-depth: 0
 
+      # 2. Python setup
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
+      # 3. Install dependencies
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
 
-      - name: Run your script
+      # 4. Run YOUR script (creates netflix.csv)
+      - name: Run script
         run: |
-          python your_script.py   # <-- change to your actual file
+          python your_script.py   # <-- CHANGE THIS
 
-      - name: Commit and push (bulletproof)
+      # 5. Bulletproof commit + push
+      - name: Commit and push
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
 
+          # ALWAYS sync first
           git fetch origin main
           git checkout main
-          git reset --hard origin/main
+          git pull origin main --rebase
 
+          # Stage changes
           git add .
 
+          # Commit only if something changed
           if ! git diff --cached --quiet; then
             git commit -m "Automated data update"
 
+            # Retry push if needed
             for i in 1 2 3
             do
-              git pull --rebase origin main && break
-              echo "Retrying pull... ($i)"
+              git push origin main && break
+              echo "Push failed, retrying... ($i)"
+              git pull origin main --rebase
               sleep 2
             done
-
-            git push origin main
           else
             echo "No changes to commit"
           fi
