@@ -5,8 +5,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS = ROOT / "scripts"
 
-def run_step(label, cmd):
+def run_step(label, script_name):
+    script_path = SCRIPTS / script_name
+
     print(f"\n=== {label} ===")
+    print(f"Looking for: {script_path}")
+
+    if not script_path.exists():
+        print(f"✗ ERROR: File not found: {script_path}")
+        sys.exit(1)
+
+    cmd = f"python {script_path}"
     print(f"→ Running: {cmd}")
 
     result = subprocess.run(cmd, shell=True)
@@ -18,20 +27,11 @@ def run_step(label, cmd):
 
 
 if __name__ == "__main__":
-    # Ensure we are in repo root
     print(f"Working directory: {ROOT}")
     print(f"Scripts directory: {SCRIPTS}")
 
-    # Step 1 — update data
-    run_step(
-        "Update data",
-        f"python {SCRIPTS / 'update_data.py'}"
-    )
-
-    # Step 2 — normalize Netflix TXT
-    run_step(
-        "Normalize Netflix TXT",
-        f"python {SCRIPTS / 'normalize_netflix_txt.py'}"
-    )
+    # Correct filenames based on your repo
+    run_step("Auto update", "auto_update.py")
+    run_step("Normalize Netflix TXT", "normalize_netflix_txt.py")
 
     print("\nPipeline completed successfully.")
