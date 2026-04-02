@@ -2,7 +2,7 @@ import csv
 from datetime import datetime
 from pathlib import Path
 
-RAW = Path("raw_netflix.txt")
+RAW = Path("Netflix_txt.txt")  # ← Changed from "raw_netflix.txt"
 OUT = Path("netflix.csv")
 
 DATE_FORMATS = ["%m/%d/%y", "%m/%d/%Y"]
@@ -61,4 +61,3 @@ def normalize():
 
 if __name__ == "__main__":
     normalize()
-
