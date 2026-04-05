@@ -2,7 +2,7 @@ name: Update Netflix Data
 
 on:
   schedule:
-    - cron: "0 */6 * * *"
+    - cron: "0 */12 * * *"   # every 12 hours
   workflow_dispatch:
 
 concurrency:
@@ -14,54 +14,37 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout repo (REQUIRED)
+      # 1. Checkout repo
       - name: Checkout repo
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       # 2. Python setup
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       # 3. Install dependencies
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
 
-      # 4. Run YOUR script (creates netflix.csv)
-      - name: Run script
+      # 4. Run script (MAKE SURE NAME MATCHES)
+      - name: Run update script
         run: |
-          python your_script.py   # <-- CHANGE THIS
+          python run_update_pipeline.py
 
-      # 5. Bulletproof commit + push
-      - name: Commit and push
+      # 5. Commit & push ONLY if changed
+      - name: Commit and push changes
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
 
-          # ALWAYS sync first
-          git fetch origin main
-          git checkout main
-          git pull origin main --rebase
+          git add netflix_data.csv
 
-          # Stage changes
-          git add .
-
-          # Commit only if something changed
           if ! git diff --cached --quiet; then
-            git commit -m "Automated data update"
-
-            # Retry push if needed
-            for i in 1 2 3
-            do
-              git push origin main && break
-              echo "Push failed, retrying... ($i)"
-              git pull origin main --rebase
-              sleep 2
-            done
+            git commit -m "Automated Netflix data update"
+            git push
           else
             echo "No changes to commit"
           fi
