@@ -1,62 +1,79 @@
-import csv
-from datetime import datetime
+import pandas as pd
 from pathlib import Path
 
-RAW = Path("Netflix_txt.txt")  # ← Changed from "raw_netflix.txt"
-OUT = Path("netflix.csv")
+# ---------------------------
+# PATH SETUP (FIXED)
+# ---------------------------
+ROOT = Path(__file__).resolve().parent
+DATA = ROOT / "data"
 
-DATE_FORMATS = ["%m/%d/%y", "%m/%d/%Y"]
+RAW_TXT = DATA / "Netflix_txt.txt"
+OUTPUT_CSV = ROOT / "netflix_data.csv"
 
-def is_date(s: str) -> bool:
-    s = s.strip()
-    for fmt in DATE_FORMATS:
-        try:
-            datetime.strptime(s, fmt)
-            return True
-        except ValueError:
-            pass
-    return False
-
-def extract_date(line: str):
-    parts = line.rsplit(" ", 1)
-    if len(parts) == 2 and is_date(parts[1]):
-        return parts[0].strip(), parts[1].strip()
-    return None, None
 
 def normalize():
-    if not RAW.exists():
-        raise FileNotFoundError(f"Missing input file: {RAW}")
+    """Convert messy Netflix TXT into clean structured CSV."""
 
-    with RAW.open("r", encoding="utf-8") as f:
+    if not RAW_TXT.exists():
+        raise FileNotFoundError(f"Missing input file: {RAW_TXT}")
+
+    print(f"Reading TXT file: {RAW_TXT}")
+
+    records = []
+    current_title_lines = []
+
+    with open(RAW_TXT, "r", encoding="utf-8") as f:
         lines = [line.rstrip() for line in f if line.strip()]
 
-    rows = []
-    current_title = ""
+    # Skip header line
+    for line in lines[1:]:
+        parts = line.rsplit(" ", 1)
 
-    for line in lines:
-        title_part, date = extract_date(line)
+        # Detect date at end of line
+        if len(parts) == 2 and "/" in parts[1]:
+            current_title_lines.append(parts[0])
 
-        if date:
-            full_title = (current_title + " " + title_part).strip()
-            rows.append((full_title, date))
-            current_title = ""
+            title = " ".join(current_title_lines).strip()
+            date = parts[1]
+
+            records.append({
+                "title": title,
+                "date": date
+            })
+
+            current_title_lines = []
         else:
-            current_title = (current_title + " " + line).strip()
+            current_title_lines.append(line)
 
-    # Validation
-    for idx, (title, date) in enumerate(rows, start=1):
-        if not title:
-            raise ValueError(f"Row {idx}: Empty title")
-        if not is_date(date):
-            raise ValueError(f"Row {idx}: Invalid date '{date}'")
+    if not records:
+        raise ValueError("No records parsed — check TXT format")
 
-    # Write CSV with QUOTED titles
-    with OUT.open("w", encoding="utf-8", newline="") as writer = csv.writer(f, quoting=csv.QUOTE_MINIMAL, escapechar='\\')
-        writer.writerow(["Title", "Date"])
-        for title, date in rows:
-            writer.writerow([title, date])
+    df = pd.DataFrame(records)
 
-    print(f"Normalized {len(rows)} rows → {OUT}")
+    # Convert date column
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+
+    # Sort newest first (optional but helpful)
+    df = df.sort_values("date", ascending=False)
+
+    # Save output
+    df.to_csv(OUTPUT_CSV, index=False)
+
+    print("Preview:")
+    print(df.head())
+
+    print(f"Saved cleaned data → {OUTPUT_CSV}")
+
+
+def main():
+    print("=== Netflix Auto Update Starting ===")
+    print(f"ROOT: {ROOT}")
+    print(f"DATA: {DATA}")
+
+    normalize()
+
+    print("=== Update Complete ===")
+
 
 if __name__ == "__main__":
-    normalize()
+    main()
