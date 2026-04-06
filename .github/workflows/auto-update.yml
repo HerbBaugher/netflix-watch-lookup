@@ -2,7 +2,8 @@ name: Update Netflix Data
 
 on:
   schedule:
-    - cron: "0 */12 * * *"   # every 12 hours
+    # Runs every 12 hours at 00:00 and 12:00 UTC
+    - cron: "0 0,12 * * *"
   workflow_dispatch:
 
 concurrency:
@@ -14,37 +15,54 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout repo
+      # 1. Checkout repo with push permissions
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}  # fixes 403 push error
+          fetch-depth: 0
 
-      # 2. Python setup
+      # 2. Set up Python
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
       # 3. Install dependencies
       - name: Install dependencies
         run: |
+          pip install --upgrade pip
           pip install -r requirements.txt
 
-      # 4. Run script (MAKE SURE NAME MATCHES)
+      # 4. Run auto_update.py (merged normalize)
       - name: Run update script
-        run: |
-          python run_update_pipeline.py
+        run: python auto_update.py
 
-      # 5. Commit & push ONLY if changed
-      - name: Commit and push changes
+      # 5. Commit & push changes (only if there are changes)
+      - name: Commit and push
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
 
-          git add netflix_data.csv
+          # Sync first
+          git fetch origin main
+          git checkout main
+          git pull origin main --rebase
 
+          # Stage changes
+          git add .
+
+          # Commit only if something changed
           if ! git diff --cached --quiet; then
             git commit -m "Automated Netflix data update"
-            git push
+
+            # Push with retry
+            for i in 1 2 3
+            do
+              git push origin main && break
+              echo "Push failed, retrying... ($i)"
+              git pull origin main --rebase
+              sleep 2
+            done
           else
             echo "No changes to commit"
-          fi
