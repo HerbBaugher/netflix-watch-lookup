@@ -1,79 +1,79 @@
 import pandas as pd
 from pathlib import Path
+import sys
 
 # ---------------------------
-# PATH SETUP (FIXED)
+# PATHS
 # ---------------------------
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
+RAW_TXT = DATA / "Netflix_txt.txt"           # Input TXT
+RAW_CSV = DATA / "NetflixViewingHistory.csv" # Optional input CSV if needed
+OUTPUT_CSV = ROOT / "netflix_data.csv"       # Normalized output
 
-RAW_TXT = DATA / "Netflix_txt.txt"
-OUTPUT_CSV = ROOT / "netflix_data.csv"
-
-
-def normalize():
-    """Convert messy Netflix TXT into clean structured CSV."""
-
+# ---------------------------
+# FUNCTIONS
+# ---------------------------
+def normalize_txt():
+    """Normalize the Netflix TXT file into a clean CSV."""
     if not RAW_TXT.exists():
-        raise FileNotFoundError(f"Missing input file: {RAW_TXT}")
+        print(f"❌ ERROR: Missing input file: {RAW_TXT}")
+        print("Make sure the file exists in your repo at data/Netflix_txt.txt")
+        sys.exit(1)
 
     print(f"Reading TXT file: {RAW_TXT}")
 
-    records = []
-    current_title_lines = []
+    try:
+        df = pd.read_csv(RAW_TXT, sep="\t", header=0, encoding="utf-8")
+    except Exception as e:
+        print(f"❌ Failed to read {RAW_TXT}: {e}")
+        sys.exit(1)
 
-    with open(RAW_TXT, "r", encoding="utf-8") as f:
-        lines = [line.rstrip() for line in f if line.strip()]
+    # Standardize column names
+    df.columns = [c.strip().replace(" ", "_").lower() for c in df.columns]
 
-    # Skip header line
-    for line in lines[1:]:
-        parts = line.rsplit(" ", 1)
+    # Convert 'date' column if it exists
+    if "date" in df.columns:
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")
 
-        # Detect date at end of line
-        if len(parts) == 2 and "/" in parts[1]:
-            current_title_lines.append(parts[0])
-
-            title = " ".join(current_title_lines).strip()
-            date = parts[1]
-
-            records.append({
-                "title": title,
-                "date": date
-            })
-
-            current_title_lines = []
-        else:
-            current_title_lines.append(line)
-
-    if not records:
-        raise ValueError("No records parsed — check TXT format")
-
-    df = pd.DataFrame(records)
-
-    # Convert date column
-    df["date"] = pd.to_datetime(df["date"], errors="coerce")
-
-    # Sort newest first (optional but helpful)
-    df = df.sort_values("date", ascending=False)
-
-    # Save output
+    # Save normalized CSV
     df.to_csv(OUTPUT_CSV, index=False)
-
-    print("Preview:")
-    print(df.head())
-
-    print(f"Saved cleaned data → {OUTPUT_CSV}")
+    print(f"✅ Saved normalized CSV → {OUTPUT_CSV}")
 
 
+def normalize_csv():
+    """Optional: normalize NetflixViewingHistory.csv if it exists."""
+    if RAW_CSV.exists():
+        print(f"Reading CSV file: {RAW_CSV}")
+        try:
+            df = pd.read_csv(RAW_CSV, header=0, encoding="utf-8")
+            df.to_csv(OUTPUT_CSV, index=False)
+            print(f"✅ Normalized CSV → {OUTPUT_CSV}")
+        except Exception as e:
+            print(f"❌ Failed to read {RAW_CSV}: {e}")
+    else:
+        print(f"⚠️ Optional CSV not found: {RAW_CSV} (skipping)")
+
+
+# ---------------------------
+# MAIN
+# ---------------------------
 def main():
-    print("=== Netflix Auto Update Starting ===")
+    print("\n=== Auto Update Script Starting ===")
     print(f"ROOT: {ROOT}")
     print(f"DATA: {DATA}")
 
-    normalize()
+    # Normalize TXT (required)
+    normalize_txt()
 
-    print("=== Update Complete ===")
+    # Normalize optional CSV (if needed)
+    normalize_csv()
+
+    print("\n=== Auto Update Complete ===")
 
 
+# ---------------------------
+# ENTRY POINT
+# ---------------------------
 if __name__ == "__main__":
     main()
