@@ -2,11 +2,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-SCRIPTS = ROOT / "scripts"
+# ---------------------------
+# ROOT = folder containing this script
+# ---------------------------
+ROOT = Path(__file__).resolve().parent
 
 def run_step(label, script_name):
-    script_path = SCRIPTS / script_name
+    script_path = ROOT / script_name
 
     print(f"\n=== {label} ===")
     print(f"Looking for: {script_path}")
@@ -25,12 +27,10 @@ def run_step(label, script_name):
 
     print(f"✓ SUCCESS: {label}")
 
-
 if __name__ == "__main__":
     print(f"Working directory: {ROOT}")
-    print(f"Scripts directory: {SCRIPTS}")
 
-    # Correct filenames based on your repo
+    # Files must now be in repo root
     run_step("Auto update", "auto_update.py")
     run_step("Normalize Netflix TXT", "normalize_netflix_txt.py")
 
