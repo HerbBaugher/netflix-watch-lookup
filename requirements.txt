@@ -1,3 +1,8 @@
 streamlit>=1.32
 pandas>=2.2.1
 PyGithub>=1.59
+odfpy
+python-docx
+pypdf
+openpyxl
+xlrd
